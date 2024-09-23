@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Luna Simons <luna@bddvlpr.com>"]
+edition = "2021"
+repository = "https://github.com/bddvlpr/sondert"
+license = "MIT"
+
+[workspace.metadata.crane]
+name = "sondert"
