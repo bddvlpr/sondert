@@ -100,6 +100,13 @@
             workspace-deny = craneLib.cargoDeny {
               inherit src;
             };
+
+            workspace-nextest = craneLib.cargoNextest (commonArgs
+              // {
+                inherit cargoArtifacts;
+                partitions = 1;
+                partitionType = "count";
+              });
           };
 
         devShells.default = pkgs.mkShell {
