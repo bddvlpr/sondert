@@ -2,7 +2,13 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+
     crane.url = "github:ipetkov/crane";
+
+    advisory-db = {
+      url = "github:rustsec/advisory-db";
+      flake = false;
+    };
   };
 
   outputs = {flake-parts, ...} @ inputs:
@@ -18,44 +24,86 @@
         pkgs,
         self',
         ...
-      }: {
-        formatter = pkgs.alejandra;
+      }: let
+        inherit (pkgs) lib;
 
-        packages = let
-          inherit (pkgs) lib;
+        craneLib = inputs.crane.mkLib pkgs;
+        src = craneLib.cleanCargoSource ./.;
 
-          craneLib = inputs.crane.mkLib pkgs;
-          src = craneLib.cleanCargoSource ./.;
-
-          commonArgs = {
-            inherit src;
-            strictDeps = true;
-          };
-
-          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-
-          crateArgs =
-            commonArgs
-            // {
-              inherit cargoArtifacts;
-              inherit (craneLib.crateNameFromCargoToml {inherit src;}) version;
-              doCheck = false;
-            };
-
-          fileSetForCrate = crate:
-            lib.fileset.toSource {
-              root = ./.;
-              fileset = lib.fileset.unions [
-                ./Cargo.toml
-                ./Cargo.lock
-                crate
-              ];
-            };
-        in rec {
+        commonArgs = {
+          inherit src;
+          strictDeps = true;
         };
 
+        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+        crateArgs =
+          commonArgs
+          // {
+            inherit cargoArtifacts;
+            inherit (craneLib.crateNameFromCargoToml {inherit src;}) version;
+            doCheck = false;
+          };
+
+        fileSetForCrate = crate:
+          lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./crates/core
+              crate
+            ];
+          };
+      in {
+        formatter = pkgs.alejandra;
+
+        packages = rec {
+          sondert-server = craneLib.buildPackage (crateArgs
+            // {
+              pname = "sondert-server";
+              cargoExtraArgs = "-p sondert-server";
+              src = fileSetForCrate ./crates/server;
+            });
+          sondert-cli = craneLib.buildPackage (crateArgs
+            // {
+              pname = "sondert-cli";
+              cargoExtraArgs = "-p sondert-cli";
+              src = fileSetForCrate ./crates/cli;
+            });
+
+          default = sondert-server;
+        };
+
+        checks =
+          self'.packages
+          // {
+            workspace-clippy = craneLib.cargoClippy (commonArgs
+              // {
+                inherit cargoArtifacts;
+                cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+              });
+
+            workspace-fmt = craneLib.cargoFmt {
+              inherit src;
+            };
+
+            workspace-toml-fmt = craneLib.taploFmt {
+              src = lib.sources.sourceFilesBySuffices src [".toml"];
+            };
+
+            workspace-audit = craneLib.cargoAudit {
+              inherit src;
+              inherit (inputs) advisory-db;
+            };
+
+            workspace-deny = craneLib.cargoDeny {
+              inherit src;
+            };
+          };
+
         devShells.default = pkgs.mkShell {
-          inputsFrom = builtins.attrValues self'.packages;
+          inputsFrom = builtins.attrValues self'.checks;
         };
       };
     };

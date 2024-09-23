@@ -3,5 +3,13 @@
 version = 3
 
 [[package]]
+name = "sondert-cli"
+version = "0.1.0"
+
+[[package]]
+name = "sondert-core"
+version = "0.1.0"
+
+[[package]]
 name = "sondert-server"
 version = "0.1.0"
